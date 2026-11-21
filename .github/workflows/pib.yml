@@ -1,0 +1,25 @@
+name: pib
+on:
+  schedule: [{cron: '*/30 * * * *'}]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  pib:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar PIB (Uruguai, dado publico da DINACIA)
+        run: |
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+          L=$(curl -s -m 40 -A "$UA" https://www.dinacia.gub.uy/ais | grep -oE '/sites/default/files/[^"]*NPIB[^"]*\.pdf' | head -1)
+          echo "link: $L"
+          [ -n "$L" ] || { echo "sem link"; exit 1; }
+          curl -s -m 90 -A "$UA" -o pib.pdf "https://www.dinacia.gub.uy$L"
+          [ "$(head -c4 pib.pdf)" = "%PDF" ] && [ "$(wc -c < pib.pdf)" -lt 6000000 ] || { echo "PDF inesperado"; exit 1; }
+          date -u +%Y-%m-%dT%H:%M:%SZ > pib.txt
+      - name: Publicar
+        run: |
+          git config user.name pib-bot; git config user.email pib-bot@users.noreply.github.com
+          git add pib.pdf pib.txt; git commit -m "pib $(cat pib.txt)" || exit 0
+          git push
